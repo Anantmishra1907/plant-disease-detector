@@ -1,0 +1,10 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pth
+*.bin
+*.pt
+model/weights/
+.env
+.DS_Store

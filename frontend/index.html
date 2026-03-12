@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LeafScan — Plant Disease Detection</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --forest: #1a2e1a;
+      --moss:   #2d4a2d;
+      --fern:   #4a7c59;
+      --sage:   #7daa8a;
+      --mint:   #b8d4be;
+      --cream:  #f5f0e8;
+      --parch:  #ede7d9;
+      --gold:   #c8a84b;
+      --coral:  #e07055;
+      --rust:   #c0522f;
+      --text:   #1e2a1e;
+      --muted:  #6b7c6b;
+      --r:      16px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'DM Sans', sans-serif; background: var(--cream); color: var(--text); min-height: 100vh; }
+
+    /* HEADER */
+    header {
+      background: var(--forest);
+      padding: 56px 40px 64px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    header::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse 80% 60% at 20% 120%, rgba(74,124,89,.4) 0%, transparent 60%),
+                  radial-gradient(ellipse 60% 80% at 80% -20%, rgba(45,74,45,.5) 0%, transparent 55%);
+    }
+    .badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(200,168,75,.15); border: 1px solid rgba(200,168,75,.4);
+      border-radius: 999px; padding: 6px 18px;
+      font-size: 12px; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--gold); margin-bottom: 20px; position: relative;
+    }
+    header h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(2.4rem, 6vw, 4rem);
+      color: #fff; line-height: 1.1;
+      position: relative; margin-bottom: 14px;
+    }
+    header h1 span { color: var(--sage); }
+    header p { color: var(--mint); font-size: 1.05rem; max-width: 520px; margin: 0 auto; line-height: 1.6; position: relative; }
+    .stats { display: flex; justify-content: center; gap: 40px; margin-top: 36px; position: relative; }
+    .stat strong { display: block; font-family: 'Playfair Display', serif; font-size: 1.6rem; color: #fff; }
+    .stat span { font-size: .8rem; color: var(--sage); letter-spacing: .06em; text-transform: uppercase; }
+
+    /* MAIN */
+    main { max-width: 1000px; margin: 0 auto; padding: 48px 24px 80px; }
+
+    /* ── UPLOAD — uses <label for="fileInput"> trick, works on all browsers ── */
+    .upload-box {
+      background: #fff;
+      border: 2.5px dashed var(--mint);
+      border-radius: var(--r);
+      padding: 52px 28px;
+      text-align: center;
+      transition: border-color .2s, background .2s, box-shadow .2s;
+      margin-bottom: 24px;
+      cursor: pointer;
+    }
+    .upload-box:hover {
+      border-color: var(--fern);
+      background: #f8fdf9;
+      box-shadow: 0 8px 32px rgba(74,124,89,.12);
+    }
+    .upload-box .icon { font-size: 3rem; display: block; margin-bottom: 14px; }
+    .upload-box h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 8px; }
+    .upload-box p  { color: var(--muted); font-size: .88rem; margin-bottom: 18px; }
+    .filetypes { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 20px; }
+    .filetypes span { background: var(--parch); border-radius: 999px; padding: 3px 12px; font-size: .75rem; color: var(--muted); }
+
+    /* The choose-file label — styled as a button */
+    .choose-btn {
+      display: inline-block;
+      background: var(--fern);
+      color: #fff;
+      padding: 12px 32px;
+      border-radius: 999px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: .95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .2s;
+      user-select: none;
+    }
+    .choose-btn:hover { background: var(--moss); }
+
+    /* The actual input is hidden — triggered by the label */
+    #fileInput { display: none; }
+
+    /* PREVIEW */
+    .preview-wrap {
+      display: none;
+      background: #fff;
+      border-radius: var(--r);
+      border: 2px solid var(--parch);
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+    .preview-wrap.show { display: block; }
+    .preview-wrap img { width: 100%; max-height: 320px; object-fit: cover; display: block; }
+    .preview-bar { display: flex; align-items: center; gap: 12px; padding: 14px 20px; }
+    .preview-name { flex: 1; font-size: .88rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .btn-remove { background: none; border: none; cursor: pointer; color: var(--coral); font-size: .9rem; font-family: 'DM Sans', sans-serif; font-weight: 600; padding: 6px 14px; border-radius: 8px; }
+    .btn-remove:hover { background: #fdf0ee; }
+
+    /* ANALYSE BUTTON */
+    .btn-analyse {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      width: 100%; padding: 18px;
+      background: linear-gradient(135deg, var(--moss), var(--fern));
+      color: #fff; border: none; border-radius: var(--r);
+      font-family: 'DM Sans', sans-serif; font-size: 1.05rem; font-weight: 600;
+      cursor: pointer; letter-spacing: .03em;
+      box-shadow: 0 6px 24px rgba(45,74,45,.28);
+      transition: transform .15s, box-shadow .15s, opacity .15s;
+      margin-bottom: 32px;
+    }
+    .btn-analyse:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 10px 32px rgba(45,74,45,.38); }
+    .btn-analyse:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+
+    /* ERROR */
+    .error-box { display: none; align-items: flex-start; gap: 10px; background: #fdf2f0; border: 1.5px solid var(--coral); border-radius: var(--r); padding: 16px 20px; color: var(--rust); font-size: .9rem; margin-bottom: 24px; line-height: 1.5; }
+    .error-box.show { display: flex; }
+
+    /* LOADER */
+    .loader { display: none; text-align: center; padding: 56px 20px; }
+    .loader.show { display: block; }
+    .spinner { width: 56px; height: 56px; border: 3px solid var(--parch); border-top-color: var(--fern); border-radius: 50%; animation: spin .85s linear infinite; margin: 0 auto 18px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loader p { color: var(--muted); font-size: .95rem; }
+
+    /* RESULTS */
+    .results { display: none; animation: up .35s ease; }
+    .results.show { display: block; }
+    @keyframes up { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+
+    .hero-card { border-radius: var(--r); padding: 28px; margin-bottom: 20px; display: flex; align-items: flex-start; gap: 20px; flex-wrap: wrap; }
+    .hero-card.healthy  { background: linear-gradient(135deg,#e8f5ec,#d1ecda); border: 1.5px solid #a8d5b5; }
+    .hero-card.diseased { background: linear-gradient(135deg,#fdf3ee,#fbe4da); border: 1.5px solid #e8b49a; }
+    .hero-card.critical { background: linear-gradient(135deg,#fef0ef,#fddbd8); border: 1.5px solid #e89a96; }
+    .hero-emoji { font-size: 3rem; flex-shrink: 0; }
+    .hero-info { flex: 1; min-width: 200px; }
+    .hero-plant { font-size: .78rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin-bottom: 3px; }
+    .hero-info h2 { font-family: 'Playfair Display', serif; font-size: 1.7rem; margin-bottom: 8px; line-height: 1.2; }
+    .hero-info p  { color: var(--muted); font-size: .9rem; line-height: 1.6; max-width: 520px; }
+    .conf-row { display: flex; justify-content: space-between; font-size: .8rem; margin: 14px 0 5px; color: var(--muted); }
+    .conf-row strong { color: var(--text); font-size: .95rem; }
+    .conf-track { height: 8px; background: rgba(0,0,0,.08); border-radius: 999px; overflow: hidden; }
+    .conf-fill  { height: 100%; border-radius: 999px; background: linear-gradient(90deg,var(--fern),var(--sage)); transition: width .8s ease; }
+    .sev-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 14px; border-radius: 999px; font-size: .78rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; margin-top: 10px; }
+    .sev-none,.sev-healthy { background:#d1f0db; color:#2d7a4a; }
+    .sev-low    { background:#e8f5d1; color:#5a7a2d; }
+    .sev-medium { background:#fef4d1; color:#8a6a10; }
+    .sev-high   { background:#fde8d1; color:#9a4a10; }
+    .sev-critical { background:#fdd8d8; color:#9a1010; }
+
+    .card { background:#fff; border-radius:var(--r); padding:22px; border:1.5px solid var(--parch); margin-bottom:20px; }
+    .card h4 { font-size:.9rem; font-weight:600; margin-bottom:14px; }
+    .pred-row { display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--parch); }
+    .pred-row:last-child { border-bottom:none; }
+    .pred-num { width:24px; height:24px; border-radius:7px; background:var(--parch); font-size:.75rem; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .pred-num.first { background:var(--forest); color:#fff; }
+    .pred-lbl { flex:1; font-size:.86rem; }
+    .pred-bar { height:3px; background:var(--parch); border-radius:999px; margin-top:3px; overflow:hidden; }
+    .pred-bar-f { height:100%; border-radius:999px; background:var(--sage); }
+    .pred-pct { font-size:.86rem; font-weight:600; color:var(--fern); }
+
+    .info-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(268px,1fr)); gap:18px; margin-bottom:20px; }
+    .info-card { background:#fff; border-radius:var(--r); padding:20px; border:1.5px solid var(--parch); }
+    .info-head { display:flex; align-items:center; gap:9px; margin-bottom:13px; }
+    .info-ico { width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:1rem; flex-shrink:0; }
+    .ico-symp{background:#fef0e8;} .ico-cause{background:#eef0fe;} .ico-treat{background:#e8fef0;} .ico-prev{background:#fefee8;} .ico-org{background:#f0fee8;}
+    .info-card h5 { font-size:.9rem; font-weight:600; }
+    .info-card ul { list-style:none; }
+    .info-card li { padding:5px 0 5px 18px; position:relative; font-size:.85rem; color:#444; line-height:1.5; border-bottom:1px solid var(--parch); }
+    .info-card li:last-child { border-bottom:none; }
+    .info-card li::before { content:'→'; position:absolute; left:0; color:var(--fern); font-size:.78rem; top:7px; }
+
+    .tips { background:var(--forest); border-radius:var(--r); padding:28px; margin-top:40px; }
+    .tips h3 { font-family:'Playfair Display',serif; font-size:1.2rem; color:#fff; margin-bottom:18px; }
+    .tips-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; }
+    .tip { background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:16px; }
+    .tip .ti { font-size:1.3rem; margin-bottom:7px; }
+    .tip h4 { font-size:.85rem; font-weight:600; color:var(--mint); margin-bottom:5px; }
+    .tip p  { font-size:.78rem; color:var(--sage); line-height:1.5; }
+
+    footer { background:var(--forest); color:var(--sage); text-align:center; padding:24px; font-size:.8rem; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="badge">🌱 AI-Powered Diagnosis</div>
+  <h1>Leaf<span>Scan</span></h1>
+  <p>Upload a photo of any plant leaf and our deep learning model will instantly diagnose diseases and recommend treatment.</p>
+  <div class="stats">
+    <div class="stat"><strong>38</strong><span>Disease Classes</span></div>
+    <div class="stat"><strong>14+</strong><span>Plant Species</span></div>
+    <div class="stat"><strong>95%+</strong><span>Accuracy</span></div>
+  </div>
+</header>
+
+<main>
+
+  <!-- ── UPLOAD SECTION ─────────────────────────────────── -->
+  <!-- The entire box is a <label> — clicking ANYWHERE on it opens the file picker -->
+  <input type="file" id="fileInput" accept="image/jpeg,image/jpg,image/png,image/webp" style="display:none" />
+  <label class="upload-box" id="uploadBox" for="fileInput">
+    <span class="icon">🌿</span>
+    <h3>Upload a Plant Leaf Photo</h3>
+    <p>Click anywhere here to pick an image, or drag & drop a leaf photo</p>
+    <div class="filetypes">
+      <span>JPG</span><span>PNG</span><span>WEBP</span><span>Max 10MB</span>
+    </div>
+    <span class="choose-btn">📁 Choose Photo</span>
+  </label>
+
+  <!-- ── PREVIEW ─────────────────────────────────────────── -->
+  <div class="preview-wrap" id="previewWrap">
+    <img id="previewImg" src="" alt="Preview" />
+    <div class="preview-bar">
+      <span class="preview-name" id="previewName">image.jpg</span>
+      <button class="btn-remove" id="btnRemove" type="button">✕ Remove</button>
+    </div>
+  </div>
+
+  <!-- ── ANALYSE BUTTON ──────────────────────────────────── -->
+  <button class="btn-analyse" id="btnAnalyse" disabled type="button">
+    🔬 Analyse Plant Disease
+  </button>
+
+  <!-- ── ERROR ───────────────────────────────────────────── -->
+  <div class="error-box" id="errorBox">
+    <span>⚠️</span>
+    <span id="errorMsg">Something went wrong.</span>
+  </div>
+
+  <!-- ── LOADER ──────────────────────────────────────────── -->
+  <div class="loader" id="loader">
+    <div class="spinner"></div>
+    <p>Analysing leaf patterns...</p>
+  </div>
+
+  <!-- ── RESULTS ─────────────────────────────────────────── -->
+  <div class="results" id="results">
+    <div class="hero-card" id="heroCard">
+      <div class="hero-emoji" id="heroEmoji">🌿</div>
+      <div class="hero-info">
+        <div class="hero-plant" id="heroPlant">—</div>
+        <h2 id="heroTitle">—</h2>
+        <p id="heroDesc">—</p>
+        <div class="conf-row"><span>Confidence</span><strong id="confVal">—</strong></div>
+        <div class="conf-track"><div class="conf-fill" id="confFill" style="width:0%"></div></div>
+        <div class="sev-badge" id="sevBadge">—</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h4>🎯 Top 3 Predictions</h4>
+      <div id="predList"></div>
+    </div>
+
+    <div class="info-grid" id="infoGrid"></div>
+  </div>
+
+  <!-- ── TIPS ────────────────────────────────────────────── -->
+  <div class="tips">
+    <h3>📸 Tips for Better Diagnosis</h3>
+    <div class="tips-grid">
+      <div class="tip"><div class="ti">🔍</div><h4>Close-Up Focus</h4><p>Capture affected leaves close up so spots and textures are clearly visible.</p></div>
+      <div class="tip"><div class="ti">☀️</div><h4>Natural Light</h4><p>Use daylight or bright indoor light. Avoid heavy shadows or flash glare.</p></div>
+      <div class="tip"><div class="ti">🍃</div><h4>Show Both Sides</h4><p>Some diseases appear differently on the top vs underside of the leaf.</p></div>
+      <div class="tip"><div class="ti">🎯</div><h4>Single Leaf</h4><p>Centre one affected leaf in frame for the most accurate results.</p></div>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  LeafScan — Powered by PyTorch MobileNetV2 · PlantVillage Dataset &nbsp;|&nbsp;
+  Always verify with a qualified agronomist before applying treatments.
+</footer>
+
+<script>
+  // ── CONFIG ────────────────────────────────────────────────────────────
+  // Local dev:  const API = 'http://localhost:8000';
+  // Deployed:   const API = 'https://plant-disease-backend.onrender.com';
+  const API = 'http://localhost:8000';
+
+  // ── ELEMENTS ──────────────────────────────────────────────────────────
+  const fileInput   = document.getElementById('fileInput');
+  const uploadBox   = document.getElementById('uploadBox');
+  const previewWrap = document.getElementById('previewWrap');
+  const previewImg  = document.getElementById('previewImg');
+  const previewName = document.getElementById('previewName');
+  const btnRemove   = document.getElementById('btnRemove');
+  const btnAnalyse  = document.getElementById('btnAnalyse');
+  const errorBox    = document.getElementById('errorBox');
+  const errorMsg    = document.getElementById('errorMsg');
+  const loader      = document.getElementById('loader');
+  const results     = document.getElementById('results');
+
+  let selectedFile = null;
+
+  // ── FILE CHOSEN via input ─────────────────────────────────────────────
+  fileInput.addEventListener('change', function() {
+    var f = this.files[0];
+    if (!f) return;
+    loadFile(f);
+  });
+
+  // ── DRAG AND DROP ─────────────────────────────────────────────────────
+  uploadBox.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    uploadBox.style.borderColor = '#4a7c59';
+    uploadBox.style.background  = '#f8fdf9';
+  });
+  uploadBox.addEventListener('dragleave', function(e) {
+    e.preventDefault();
+    uploadBox.style.borderColor = '';
+    uploadBox.style.background  = '';
+  });
+  uploadBox.addEventListener('drop', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    uploadBox.style.borderColor = '';
+    uploadBox.style.background  = '';
+    var f = e.dataTransfer.files[0];
+    if (f) loadFile(f);
+  });
+
+  // ── LOAD FILE ─────────────────────────────────────────────────────────
+  function loadFile(f) {
+    var allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (allowed.indexOf(f.type) === -1) {
+      showErr('Please choose a JPG, PNG, or WEBP image.');
+      return;
+    }
+    if (f.size > 10 * 1024 * 1024) {
+      showErr('File is too large — max 10MB.');
+      return;
+    }
+
+    selectedFile = f;
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      previewImg.src = e.target.result;
+      previewName.textContent = f.name;
+      previewWrap.classList.add('show');
+      uploadBox.style.display = 'none';
+      btnAnalyse.disabled = false;
+      hideErr();
+      hideResults();
+    };
+    reader.readAsDataURL(f);
+  }
+
+  // ── REMOVE IMAGE ──────────────────────────────────────────────────────
+  btnRemove.addEventListener('click', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    selectedFile = null;
+    fileInput.value = '';
+    previewWrap.classList.remove('show');
+    uploadBox.style.display = '';
+    btnAnalyse.disabled = true;
+    hideResults();
+    hideErr();
+  });
+
+  // ── ANALYSE ───────────────────────────────────────────────────────────
+  btnAnalyse.addEventListener('click', async function() {
+    if (!selectedFile) return;
+    hideErr();
+    hideResults();
+    loader.classList.add('show');
+    btnAnalyse.disabled = true;
+
+    try {
+      var fd = new FormData();
+      fd.append('file', selectedFile);
+
+      var res = await fetch(API + '/predict', { method: 'POST', body: fd });
+      var data = await res.json();
+
+      if (!res.ok) throw new Error(data.detail || 'Server error ' + res.status);
+      render(data);
+
+    } catch(e) {
+      if (!e.message || e.message.toLowerCase().includes('fetch') || e.message.toLowerCase().includes('failed')) {
+        showErr('Cannot reach the backend server. Make sure it is running:\n\ncd backend && uvicorn main:app --reload --port 8000');
+      } else {
+        showErr(e.message);
+      }
+    } finally {
+      loader.classList.remove('show');
+      btnAnalyse.disabled = false;
+    }
+  });
+
+  // ── RENDER RESULTS ────────────────────────────────────────────────────
+  function render(data) {
+    var p   = data.prediction;
+    var sev = (p.severity || 'none').toLowerCase();
+
+    var heroCard = document.getElementById('heroCard');
+    heroCard.className = 'hero-card ' + (p.is_healthy ? 'healthy' : sev === 'critical' ? 'critical' : 'diseased');
+
+    document.getElementById('heroEmoji').textContent = p.is_healthy ? '✅' : (sev === 'critical' ? '🚨' : '⚠️');
+    document.getElementById('heroPlant').textContent = p.plant;
+    document.getElementById('heroTitle').textContent = p.disease_short;
+    document.getElementById('heroDesc').textContent  = p.description;
+    document.getElementById('confVal').textContent   = p.confidence + '%';
+    document.getElementById('confFill').style.width  = p.confidence + '%';
+
+    var sb = document.getElementById('sevBadge');
+    sb.className   = 'sev-badge sev-' + sev;
+    sb.textContent = p.is_healthy ? '✓ Healthy Plant' : 'Severity: ' + p.severity;
+
+    // Predictions list
+    var predHtml = '';
+    for (var i = 0; i < data.top_3_predictions.length; i++) {
+      var pr    = data.top_3_predictions[i];
+      var label = pr.class.replace(/___/g, ' — ').replace(/_/g, ' ');
+      predHtml += '<div class="pred-row">'
+        + '<div class="pred-num ' + (i===0?'first':'') + '">' + (i+1) + '</div>'
+        + '<div class="pred-lbl">' + label
+        +   '<div class="pred-bar"><div class="pred-bar-f" style="width:' + pr.confidence + '%"></div></div>'
+        + '</div>'
+        + '<div class="pred-pct">' + pr.confidence + '%</div>'
+        + '</div>';
+    }
+    document.getElementById('predList').innerHTML = predHtml;
+
+    // Info cards
+    var sections = [
+      { key:'symptoms',        ico:'🔎', cls:'ico-symp',  title:'Symptoms',         show: !p.is_healthy },
+      { key:'causes',          ico:'🧬', cls:'ico-cause', title:'Causes',           show: !p.is_healthy },
+      { key:'treatment',       ico:'💊', cls:'ico-treat', title:'Treatment',        show: true },
+      { key:'prevention',      ico:'🛡️', cls:'ico-prev',  title:'Prevention',       show: true },
+      { key:'organic_remedies',ico:'🌿', cls:'ico-org',   title:'Organic Remedies', show: true },
+    ];
+
+    var gridHtml = '';
+    for (var j = 0; j < sections.length; j++) {
+      var s = sections[j];
+      if (!s.show || !p[s.key] || p[s.key].length === 0) continue;
+      var items = '';
+      for (var k = 0; k < p[s.key].length; k++) items += '<li>' + p[s.key][k] + '</li>';
+      gridHtml += '<div class="info-card">'
+        + '<div class="info-head"><div class="info-ico ' + s.cls + '">' + s.ico + '</div><h5>' + s.title + '</h5></div>'
+        + '<ul>' + items + '</ul>'
+        + '</div>';
+    }
+    document.getElementById('infoGrid').innerHTML = gridHtml;
+
+    results.classList.add('show');
+    results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // ── HELPERS ───────────────────────────────────────────────────────────
+  function showErr(msg) { errorMsg.textContent = msg; errorBox.classList.add('show'); }
+  function hideErr()    { errorBox.classList.remove('show'); }
+  function hideResults(){ results.classList.remove('show'); }
+</script>
+</body>
+</html>

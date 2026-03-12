@@ -1,0 +1,45 @@
+version: "3.9"
+
+services:
+
+  # ── Backend API ──────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: plant-disease-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"          # Direct API access for development
+    volumes:
+      - ./backend/model/weights:/app/model/weights  # Persist trained weights
+    environment:
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - plant-net
+
+  # ── Frontend (Nginx) ─────────────────────────────────────────────────
+  frontend:
+    image: nginx:alpine
+    container_name: plant-disease-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - plant-net
+
+networks:
+  plant-net:
+    driver: bridge
